@@ -50,7 +50,7 @@ Sesuaikan variabel penting:
 APP_NAME=LaravelApp
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=[https://domain-anda.com](https://domain-anda.com)
+APP_URL=https://domain-anda.com
 
 # Konfigurasi Database
 DB_CONNECTION=mysql
@@ -119,7 +119,7 @@ Isi konfigurasi:
 ```nginx
 server {
     listen 80;
-    server_name domain-anda.com [www.domain-anda.com](https://www.domain-anda.com);
+    server_name domain-anda.com
 
     client_max_body_size 100M;
 
@@ -159,11 +159,11 @@ Isi konfigurasi:
 ```apache
 <VirtualHost *:80>
     ServerName domain-anda.com
-    ServerAlias [www.domain-anda.com](https://www.domain-anda.com)
+    ServerAlias https://www.domain-anda.com
 
     ProxyPreserveHost On
-    ProxyPass / [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-    ProxyPassReverse / [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+    ProxyPass / http://127.0.0.1:8000/
+    ProxyPassReverse / http://127.0.0.1:8000/
 
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Port "443"
@@ -258,5 +258,5 @@ docker compose down
 Uji endpoint langsung di server lokal:
 
 ```bash
-curl -I [http://127.0.0.1:8000](http://127.0.0.1:8000)
+curl -I http://127.0.0.1:8000
 ```
