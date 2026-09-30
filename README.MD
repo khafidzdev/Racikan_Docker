@@ -1,6 +1,6 @@
 # Panduan Deployment dan Instalasi Docker Laravel (FrankenPHP)
 
-Dokumentasi instalasi, konfigurasi, dan deployment aplikasi Laravel menggunakan Docker Compose dan FrankenPHP (PHP 8.4 Alpine), lengkap dengan setup domain via Cloudflare Tunnel atau Reverse Proxy Nginx.
+Dokumentasi deployment universal untuk aplikasi Laravel menggunakan Docker Compose dan FrankenPHP (PHP 8.4 Alpine), dilengkapi opsi Reverse Proxy menggunakan Nginx, Apache2, maupun Cloudflare Tunnel.
 
 ---
 
@@ -9,8 +9,7 @@ Dokumentasi instalasi, konfigurasi, dan deployment aplikasi Laravel menggunakan 
 Pastikan server telah terpasang:
 - Git
 - Docker Engine dan Docker Compose v2 (`docker compose`)
-- Nginx (jika menggunakan metode Reverse Proxy lokal)
-- Cloudflare Tunnel / `cloudflared` (jika menggunakan metode Cloudflare Tunnel)
+- Salah satu dari: Nginx, Apache2, atau Cloudflare Tunnel
 
 ---
 
@@ -38,14 +37,14 @@ composer install --optimize-autoloader --no-dev
 
 ### 3. Setting Environment (.env)
 
-Salin file konfigurasi dan sesuaikan isinya:
+Salin file konfigurasi dan sesuaikan nilainya:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Pastikan variabel database dan environment disesuaikan:
+Sesuaikan variabel penting:
 
 ```dotenv
 APP_NAME=LaravelApp
@@ -66,7 +65,7 @@ DB_PASSWORD=rahasia
 
 ### 4. Build Docker Image
 
-Build image FrankenPHP tanpa menggunakan cache:
+Build image FrankenPHP tanpa cache:
 
 ```bash
 docker compose build --no-cache
@@ -76,13 +75,13 @@ docker compose build --no-cache
 
 ### 5. Menjalankan Container
 
-Jalankan container di latar belakang (detached mode):
+Jalankan container di latar belakang:
 
 ```bash
 docker compose up -d
 ```
 
-Pastikan container sudah aktif:
+Pastikan container berstatus running:
 
 ```bash
 docker compose ps
@@ -105,59 +104,22 @@ docker compose exec app php artisan optimize
 
 ## Menghubungkan Domain ke Container
 
-Pilih salah satu metode di bawah ini sesuai arsitektur jaringan yang digunakan:
-
-### Opsi A: Menggunakan Cloudflare Tunnel
-
-Jika service `cloudflared` sudah terpasang dan aktif di server host:
-
-1. Buka **Cloudflare Zero Trust** -> **Networks** -> **Tunnels**.
-2. Pilih Tunnel server yang aktif -> klik **Configure**.
-3. Masuk ke tab **Public Hostname** -> klik **Add a public hostname**.
-4. Isi data routing:
-   - **Subdomain / Domain:** Tentukan domain atau subdomain (contoh: `app` dan `domainanda.com`).
-   - **Type:** `HTTP`
-   - **URL:** `localhost:8000` (atau port host yang diatur pada `docker-compose.yml`).
-5. Klik **Save hostname**.
+Pilih salah satu metode reverse proxy yang sesuai dengan web server di host VPS Anda:
 
 ---
 
-### Opsi B: Menggunakan Nginx Reverse Proxy di Host Server
+### Opsi A: Menggunakan Nginx (Host Server)
 
-Jika menggunakan web server Nginx bawaan server host untuk mengarahkan trafik domain ke container:
-
-#### 1. Buat Konfigurasi Virtual Host
-
-Buat file konfigurasi baru di direktori `sites-available`:
-
+#### 1. Buat File Virtual Host Nginx
 ```bash
 nano /etc/nginx/sites-available/<nama_domain>.conf
 ```
 
-Isi dengan konfigurasi reverse proxy berikut:
-
+Isi konfigurasi:
 ```nginx
 server {
     listen 80;
     server_name domain-anda.com [www.domain-anda.com](https://www.domain-anda.com);
-
-    # Meneruskan IP asli client (termasuk jika di-proxy Cloudflare)
-    set_real_ip_from 173.245.48.0/20;
-    set_real_ip_from 103.21.244.0/22;
-    set_real_ip_from 103.22.200.0/22;
-    set_real_ip_from 103.31.4.0/22;
-    set_real_ip_from 141.101.64.0/18;
-    set_real_ip_from 108.162.192.0/18;
-    set_real_ip_from 190.93.240.0/20;
-    set_real_ip_from 188.114.96.0/20;
-    set_real_ip_from 197.234.240.0/22;
-    set_real_ip_from 198.41.128.0/17;
-    set_real_ip_from 162.158.0.0/15;
-    set_real_ip_from 104.16.0.0/13;
-    set_real_ip_from 104.24.0.0/14;
-    set_real_ip_from 172.64.0.0/13;
-    set_real_ip_from 131.0.72.0/22;
-    real_ip_header CF-Connecting-IP;
 
     client_max_body_size 100M;
 
@@ -171,25 +133,75 @@ server {
 }
 ```
 
-#### 2. Aktifkan Site dan Restart Nginx
-
+#### 2. Aktifkan dan Reload Nginx
 ```bash
 ln -s /etc/nginx/sites-available/<nama_domain>.conf /etc/nginx/sites-enabled/
 nginx -t
 systemctl reload nginx
 ```
 
-#### 3. Pasang SSL Gratis (Certbot) jika tidak memakai Flexible SSL Cloudflare
+---
 
+### Opsi B: Menggunakan Apache2 (Host Server)
+
+#### 1. Aktifkan Modul Proxy Apache
 ```bash
-certbot --nginx -d domain-anda.com -d [www.domain-anda.com](https://www.domain-anda.com)
+a2enmod proxy proxy_http headers
+systemctl restart apache2
 ```
+
+#### 2. Buat File Virtual Host Apache
+```bash
+nano /etc/apache2/sites-available/<nama_domain>.conf
+```
+
+Isi konfigurasi:
+```apache
+<VirtualHost *:80>
+    ServerName domain-anda.com
+    ServerAlias [www.domain-anda.com](https://www.domain-anda.com)
+
+    ProxyPreserveHost On
+    ProxyPass / [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+    ProxyPassReverse / [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Port "443"
+
+    ErrorLog ${APACHE_LOG_DIR}/<nama_domain>_error.log
+    CustomLog ${APACHE_LOG_DIR}/<nama_domain>_access.log combined
+</VirtualHost>
+```
+
+#### 3. Aktifkan dan Reload Apache
+```bash
+a2ensite <nama_domain>.conf
+apache2ctl configtest
+systemctl reload apache2
+```
+
+---
+
+### Opsi C: Menggunakan Cloudflare Tunnel (Tanpa Nginx / Tanpa Apache)
+
+Jika host sudah memiliki service `cloudflared` yang aktif:
+
+1. Buka **Cloudflare Zero Trust** -> **Networks** -> **Tunnels**.
+2. Pilih Tunnel yang aktif -> klik **Configure**.
+3. Masuk ke tab **Public Hostname** -> klik **Add a public hostname**.
+4. Isi data routing:
+   - **Subdomain / Domain:** Tentukan domain atau subdomain target.
+   - **Type:** `HTTP`
+   - **URL:** `localhost:8000` (atau port host pada `docker-compose.yml`).
+5. Klik **Save hostname**.
 
 ---
 
 ## Penyesuaian Force HTTPS di Laravel
 
-Agar seluruh file CSS, JS, dan route Laravel otomatis menggunakan skema `https://` tanpa memicu isu *mixed content*, pastikan file `app/Providers/AppServiceProvider.php` memiliki konfigurasi berikut:
+Agar asset CSS, JS, dan seluruh URL Laravel otomatis menggunakan HTTPS saat berada di balik proxy:
+
+Tambahkan kode ini pada file `app/Providers/AppServiceProvider.php`:
 
 ```php
 use Illuminate\Support\Facades\URL;
@@ -202,7 +214,7 @@ public function boot(): void
 }
 ```
 
-Setelah memperbarui provider, bersihkan dan perbarui cache:
+Segarkan cache Laravel di container:
 
 ```bash
 docker compose exec app php artisan optimize:clear
@@ -228,7 +240,7 @@ docker compose exec app sh
 docker compose restart app
 ```
 
-### Refresh Cache Setelah Perubahan Code atau .env
+### Refresh Cache Setelah Update Code / .env
 ```bash
 docker compose exec app php artisan optimize:clear
 docker compose exec app php artisan optimize
@@ -243,7 +255,7 @@ docker compose down
 
 ## Verifikasi Akses
 
-Lakukan pengujian langsung di server:
+Uji endpoint langsung di server lokal:
 
 ```bash
 curl -I [http://127.0.0.1:8000](http://127.0.0.1:8000)
