@@ -1,0 +1,35 @@
+services:
+  app:
+    #build image
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: app #sesuaikan dengan nama container
+    restart: unless-stopped
+    #setting port 8000 jika ingin default
+    ports:
+      - "${APP_PORT:-8000}:80"
+    env_file:
+      - .env
+
+    volumes:
+      - ./:/app
+      - app_vendor:/app/vendor
+      #mounting konfigurasi Caddy dan PHP kustom
+      - ./docker/php/Caddyfile:/etc/caddy/Caddyfile
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/99-custom.ini
+      # ssl certs
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app_network
+networks:
+  app_network:
+    driver: bridge
+volumes:
+  app_vendor:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
